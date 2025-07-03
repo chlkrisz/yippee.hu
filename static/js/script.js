@@ -1,3 +1,124 @@
+const assets = {
+    images: [
+        {
+            "default": "static/creature_variants/default.png",
+        },
+        {
+            "troll": "static/creature_variants/troll.png",
+        },
+        {
+            "mario": "static/creature_variants/mario.png",
+        },
+        {
+            "scream": "static/creature_variants/augh.png",
+        },
+        {
+            "louis": "static/creature_variants/louis.png",
+        }
+    ],
+    sounds: [
+        {
+            "default": "static/creature_sounds/default.mp3",
+        },
+        {
+            "troll": "static/creature_sounds/troll.mp3",
+        },
+        {
+            "mario": "static/creature_sounds/mario.mp3",
+        },
+        {
+            "scream": "static/creature_sounds/scream.mp3",
+        },
+        {
+            "louis": "static/creature_sounds/louis.mp3",
+        }
+    ]
+};
+
+const loadedImages = {};
+const loadedSounds = {};
+
+const updateProgressBar = (progress) => {
+    progressBar.style.width = `${progress}%`;
+    progressBar.style.setProperty('--progress-text', `'${Math.round(progress)}%'`);
+};
+
+const loadAssets = (assets, type, startProgress, endProgress) => {
+    return new Promise((resolve, reject) => {
+        let loadedCount = 0;
+        const totalCount = assets.length;
+        const progressRange = endProgress - startProgress;
+        
+        assets.forEach(asset => {
+            const key = Object.keys(asset)[0];
+            const src = asset[key];
+            if (type === 'image') {
+                const img = new Image();
+                img.src = src;
+                img.onload = () => {
+                    loadedImages[key] = img;
+                    loadedCount++;
+                    const currentProgress = startProgress + (loadedCount / totalCount) * progressRange;
+                    updateProgressBar(currentProgress);
+                    if (loadedCount === totalCount) {
+                        resolve(loadedImages);
+                    }
+                };
+                img.onerror = () => {
+                    reject(new Error(`Failed to load image: ${src}`));
+                };
+            } else if (type === 'sound') {
+                const audio = new Audio(src);
+                audio.oncanplaythrough = () => {
+                    loadedSounds[key] = audio;
+                    loadedCount++;
+                    const currentProgress = startProgress + (loadedCount / totalCount) * progressRange;
+                    updateProgressBar(currentProgress);
+                    if (loadedCount === totalCount) {
+                        resolve(loadedSounds);
+                    }
+                };
+                audio.onerror = () => {
+                    reject(new Error(`Failed to load sound: ${src}`));
+                };
+            }
+        });
+    });
+};
+
+const progressBar = document.querySelector('.progress-bar');
+const loadingScreen = document.querySelector('.loading-screen');
+
+updateProgressBar(0);
+
+loadAssets(assets.images, 'image', 0, 50)
+    .then(() => {
+        console.log('Images loaded successfully');
+        return loadAssets(assets.sounds, 'sound', 50, 100);
+    })
+    .then(() => {
+        console.log('All assets loaded successfully');
+        initializeCreature();
+        setTimeout(() => {
+            loadingScreen.classList.add('fadeout');
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+            }, 300);
+        }, 100);
+    })
+    .catch(error => {
+        console.error('Error loading assets:', error);
+        const loadingText = document.createElement('p');
+        loadingScreen.appendChild(loadingText);
+        loadingText.style.position = 'absolute';
+        loadingText.style.top = '50%';
+        loadingText.style.left = '50%';
+        loadingText.style.transform = 'translate(-50%, -50%)';
+        loadingText.style.fontSize = '20px';
+        loadingText.textContent = 'Error loading assets. Please refresh the page.';
+        loadingText.style.color = 'red';
+    });
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -11,13 +132,24 @@ const tipTimer = setTimeout(() => {
 const sidebar = document.querySelector('.sidebar');
 
 const creatureImg = new Image();
-creatureImg.src = 'static/creature_variants/default.png';
 
 let creature = {
-    x: canvas.width / 2 - creatureImg.naturalWidth / 2 / 5,
-    y: canvas.height / 2 - creatureImg.naturalHeight / 2 / 5,
-    width: creatureImg.naturalWidth / 5,
-    height: creatureImg.naturalHeight / 5
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 200
+};
+
+const initializeCreature = () => {
+    if (loadedImages['default']) {
+        creatureImg.src = loadedImages['default'].src;
+        creatureImg.onload = () => {
+            creature.width = creatureImg.naturalWidth / 5;
+            creature.height = creatureImg.naturalHeight / 5;
+            creature.x = canvas.width / 2 - creature.width / 2;
+            creature.y = canvas.height / 2 - creature.height / 2;
+        };
+    }
 };
 
 const particles = [];
@@ -26,31 +158,24 @@ let variant = 'default';
 
 document.getElementById('variants').addEventListener('change', e => {
     variant = e.target.value;
-    switch (variant) {
-        case 'default':
-            creatureImg.src = 'static/creature_variants/default.png';
-            break;
-        case 'troll':
-            creatureImg.src = 'static/creature_variants/troll.png';
-            break;
-        case 'mario':
-            creatureImg.src = 'static/creature_variants/mario.png';
-            break;
-        case 'scream':
-            creatureImg.src = 'static/creature_variants/augh.png';
-            break;
-        case 'louis':
-            creatureImg.src = 'static/creature_variants/louis.png';
-            break;
-        default:
-            creatureImg.src = 'static/creature_variants/default.png';
+    
+    if (loadedImages[variant]) {
+        creatureImg.src = loadedImages[variant].src;
+        creatureImg.onload = () => {
+            creature.width = creatureImg.naturalWidth / 5;
+            creature.height = creatureImg.naturalHeight / 5;
+            creature.x = canvas.width / 2 - creature.width / 2;
+            creature.y = canvas.height / 2 - creature.height / 2;
+        };
+    } else {
+        creatureImg.src = loadedImages['default'].src;
+        creatureImg.onload = () => {
+            creature.width = creatureImg.naturalWidth / 5;
+            creature.height = creatureImg.naturalHeight / 5;
+            creature.x = canvas.width / 2 - creature.width / 2;
+            creature.y = canvas.height / 2 - creature.height / 2;
+        };
     }
-    creatureImg.onload = () => {
-        creature.width = creatureImg.naturalWidth / 5;
-        creature.height = creatureImg.naturalHeight / 5;
-        creature.x = canvas.width / 2 - creature.width / 2;
-        creature.y = canvas.height / 2 - creature.height / 2;
-    };
 });
 
 let firstClick = true;
@@ -85,12 +210,13 @@ canvas.addEventListener('click', e => {
             });
         }
 
-        const creatureSound = new Audio();
-        creatureSound.src = 'static/creature_sounds/' + variant + '.mp3';
-        creatureSound.volume = 0.3;
-        creatureSound.play().catch(err => {
-            console.error('Error playing sound:', err);
-        });
+        if (loadedSounds[variant]) {
+            const creatureSound = loadedSounds[variant].cloneNode();
+            creatureSound.volume = 0.3;
+            creatureSound.play().catch(err => {
+                console.error('Error playing sound:', err);
+            });
+        }
     }
 });
 
@@ -100,7 +226,7 @@ document.getElementById('hide').addEventListener('click', () => {
     sidebar.style.animationFillMode = "forwards";
     setTimeout(() => {
         sidebar.style.display = 'none';
-        document.getElementById('show').style.display = 'block';
+        document.getElementById('show').style.display = 'flex';
     }, 500);
 });
 
