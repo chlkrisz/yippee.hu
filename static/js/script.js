@@ -38,6 +38,8 @@ const assets = {
 const loadedImages = {};
 const loadedSounds = {};
 
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
 const updateProgressBar = (progress) => {
     progressBar.style.width = `${progress}%`;
     progressBar.style.setProperty('--progress-text', `'${Math.round(progress)}%'`);
@@ -68,8 +70,9 @@ const loadAssets = (assets, type, startProgress, endProgress) => {
                     reject(new Error(`Failed to load image: ${src}`));
                 };
             } else if (type === 'sound') {
-                const audio = new Audio(src);
-                audio.oncanplaythrough = () => {
+                const audio = new Audio();
+                
+                const onAudioLoaded = () => {
                     loadedSounds[key] = audio;
                     loadedCount++;
                     const currentProgress = startProgress + (loadedCount / totalCount) * progressRange;
@@ -78,9 +81,25 @@ const loadAssets = (assets, type, startProgress, endProgress) => {
                         resolve(loadedSounds);
                     }
                 };
-                audio.onerror = () => {
-                    reject(new Error(`Failed to load sound: ${src}`));
-                };
+                
+                // proba cseresznye
+                audio.addEventListener('canplaythrough', onAudioLoaded, { once: true });
+                audio.addEventListener('loadeddata', onAudioLoaded, { once: true });
+                audio.addEventListener('canplay', onAudioLoaded, { once: true });
+                
+                const timeoutId = setTimeout(() => {
+                    console.warn(`Audio loading timeout for ${src}, proceeding anyway`);
+                    onAudioLoaded();
+                }, 3000);
+                
+                audio.addEventListener('error', () => {
+                    clearTimeout(timeoutId);
+                    console.warn(`Failed to load sound: ${src}, proceeding anyway`);
+                    onAudioLoaded();
+                });
+                
+                audio.preload = 'metadata';
+                audio.src = src;
             }
         });
     });
@@ -91,10 +110,26 @@ const loadingScreen = document.querySelector('.loading-screen');
 
 updateProgressBar(0);
 
-loadAssets(assets.images, 'image', 0, 50)
+const imageEndProgress = isMobile ? 70 : 50;
+const soundStartProgress = isMobile ? 70 : 50;
+
+loadAssets(assets.images, 'image', 0, imageEndProgress)
     .then(() => {
         console.log('Images loaded successfully');
-        return loadAssets(assets.sounds, 'sound', 50, 100);
+        if (isMobile) {
+            return Promise.race([
+                loadAssets(assets.sounds, 'sound', soundStartProgress, 100),
+                new Promise(resolve => {
+                    setTimeout(() => {
+                        console.log('Sound loading timed out on mobile, proceeding anyway');
+                        updateProgressBar(100);
+                        resolve();
+                    }, 2000);
+                })
+            ]);
+        } else {
+            return loadAssets(assets.sounds, 'sound', soundStartProgress, 100);
+        }
     })
     .then(() => {
         console.log('All assets loaded successfully');
@@ -108,15 +143,15 @@ loadAssets(assets.images, 'image', 0, 50)
     })
     .catch(error => {
         console.error('Error loading assets:', error);
-        const loadingText = document.createElement('p');
-        loadingScreen.appendChild(loadingText);
-        loadingText.style.position = 'absolute';
-        loadingText.style.top = '50%';
-        loadingText.style.left = '50%';
-        loadingText.style.transform = 'translate(-50%, -50%)';
-        loadingText.style.fontSize = '20px';
-        loadingText.textContent = 'Error loading assets. Please refresh the page.';
-        loadingText.style.color = 'red';
+        console.log('Proceeding despite loading errors');
+        updateProgressBar(100);
+        initializeCreature();
+        setTimeout(() => {
+            loadingScreen.classList.add('fadeout');
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+            }, 300);
+        }, 100);
     });
 
 const canvas = document.getElementById('canvas');
@@ -216,6 +251,17 @@ canvas.addEventListener('click', e => {
             creatureSound.play().catch(err => {
                 console.error('Error playing sound:', err);
             });
+        } else if (isMobile) {
+            try {
+                const creatureSound = new Audio();
+                creatureSound.src = `static/creature_sounds/${variant}.mp3`;
+                creatureSound.volume = 0.3;
+                creatureSound.play().catch(err => {
+                    console.error('Error playing dynamic sound:', err);
+                });
+            } catch (err) {
+                console.error('Error creating dynamic sound:', err);
+            }
         }
     }
 });
